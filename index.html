@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Speech Recognition</title>
+    <style>
+      /* styles.css */
+    body {
+        width: 100%;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    p {
+        border: 1px solid black;
+        border-radius: 1rem;
+        padding: 5rem 8rem 5rem 8rem;
+    }
+
+    .inactive {
+        color: #555;
+    }
+    .active {
+        color: #00f; /* or any other color you prefer */
+    }
+
+    </style>
+  </head>
+  <body>
+    <label for="languageSelect">Select Language:</label>
+    <select id="languageSelect">
+        <option value="en-US">English</option>
+        <option value="mr-IN">Marathi</option>
+    </select>
+
+    <button id="startButton">Start</button>
+    <button id="closeButton">Close</button>
+    <p id="convert_text" class="inactive">Click 'Start' to begin speech recognition.</p>
+
+    <script>
+      // main.js
+    const startButton = document.getElementById("startButton");
+    const closeButton = document.getElementById("closeButton");
+    const convertText = document.getElementById("convert_text");
+    const languageSelect = document.getElementById("languageSelect");
+
+    var speech = false; // Initialize speech recognition as false
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.interimResults = true;
+
+    const socket = new WebSocket("http://192.168.1.107:81/");
+
+    recognition.addEventListener("result", (e) => {
+        const transcript = Array.from(e.results)
+            .map((result) => result[0])
+            .map((result) => result.transcript);
+        convertText.innerHTML = transcript;
+
+        socket.send(transcript);
+    });
+
+    recognition.addEventListener("end", () => {
+        if (speech) {
+            recognition.start();
+        }
+        convertText.classList.remove("active");
+        convertText.classList.add("inactive");
+    });
+
+    startButton.addEventListener("click", function () {
+        if (!speech) {
+            speech = true;
+            recognition.start();
+            convertText.innerHTML = "Listening...";
+            convertText.classList.remove("inactive");
+            convertText.classList.add("active");
+        }
+    });
+
+    closeButton.addEventListener("click", function () {
+        if (speech) {
+            speech = false;
+            recognition.stop();
+        }
+        convertText.innerHTML = "Click 'Start' to begin speech recognition.";
+        convertText.classList.remove("active");
+        convertText.classList.add("inactive");
+    });
+
+    languageSelect.addEventListener("change", function () {
+        // Set the language based on the selected option
+        recognition.lang = languageSelect.value;
+    });
+
+    </script>
+  </body>
+</html>
