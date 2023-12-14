@@ -1,11 +1,13 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
-  <head>
+<head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Speech Recognition</title>
+    <link rel="stylesheet" href="styles.css" />
     <style>
-      /* styles.css */
+        /* styles.css */
     body {
         width: 100%;
         height: 100vh;
@@ -30,8 +32,8 @@
     }
 
     </style>
-  </head>
-  <body>
+</head>
+<body>
     <label for="languageSelect">Select Language:</label>
     <select id="languageSelect">
         <option value="en-US">English</option>
@@ -43,60 +45,56 @@
     <p id="convert_text" class="inactive">Click 'Start' to begin speech recognition.</p>
 
     <script>
-      // main.js
-    const startButton = document.getElementById("startButton");
-    const closeButton = document.getElementById("closeButton");
-    const convertText = document.getElementById("convert_text");
-    const languageSelect = document.getElementById("languageSelect");
+        // main.js
+        const startButton = document.getElementById("startButton");
+        const closeButton = document.getElementById("closeButton");
+        const convertText = document.getElementById("convert_text");
+        const languageSelect = document.getElementById("languageSelect");
 
-    var speech = false; // Initialize speech recognition as false
-    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    recognition.interimResults = true;
+        var speech = false; // Initialize speech recognition as false
+        const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+        recognition.interimResults = true;
 
-    const socket = new WebSocket("http://192.168.1.107:81/");
+        recognition.addEventListener("result", (e) => {
+            const transcript = Array.from(e.results)
+                .map((result) => result[0])
+                .map((result) => result.transcript);
+            convertText.innerHTML = transcript;
+        });
 
-    recognition.addEventListener("result", (e) => {
-        const transcript = Array.from(e.results)
-            .map((result) => result[0])
-            .map((result) => result.transcript);
-        convertText.innerHTML = transcript;
+        recognition.addEventListener("end", () => {
+            if (speech) {
+                recognition.start();
+            }
+            convertText.classList.remove("active");
+            convertText.classList.add("inactive");
+        });
 
-        socket.send(transcript);
-    });
+        startButton.addEventListener("click", function () {
+            if (!speech) {
+                speech = true;
+                recognition.start();
+                convertText.innerHTML = "Listening...";
+                convertText.classList.remove("inactive");
+                convertText.classList.add("active");
+            }
+        });
 
-    recognition.addEventListener("end", () => {
-        if (speech) {
-            recognition.start();
-        }
-        convertText.classList.remove("active");
-        convertText.classList.add("inactive");
-    });
+        closeButton.addEventListener("click", function () {
+            if (speech) {
+                speech = false;
+                recognition.stop();
+            }
+            convertText.innerHTML = "Click 'Start' to begin speech recognition.";
+            convertText.classList.remove("active");
+            convertText.classList.add("inactive");
+        });
 
-    startButton.addEventListener("click", function () {
-        if (!speech) {
-            speech = true;
-            recognition.start();
-            convertText.innerHTML = "Listening...";
-            convertText.classList.remove("inactive");
-            convertText.classList.add("active");
-        }
-    });
-
-    closeButton.addEventListener("click", function () {
-        if (speech) {
-            speech = false;
-            recognition.stop();
-        }
-        convertText.innerHTML = "Click 'Start' to begin speech recognition.";
-        convertText.classList.remove("active");
-        convertText.classList.add("inactive");
-    });
-
-    languageSelect.addEventListener("change", function () {
-        // Set the language based on the selected option
-        recognition.lang = languageSelect.value;
-    });
+        languageSelect.addEventListener("change", function () {
+            // Set the language based on the selected option
+            recognition.lang = languageSelect.value;
+        });
 
     </script>
-  </body>
+</body>
 </html>
