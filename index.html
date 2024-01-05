@@ -1,100 +1,178 @@
-<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Speech Recognition</title>
-    <link rel="stylesheet" href="styles.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transcribe</title>
     <style>
-        /* styles.css */
-    body {
-        width: 100%;
-        height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-direction: column;
-        gap: 1rem;
-    }
+        /* Paste the CSS code here */
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f4f4;
+            color: #333;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
 
-    p {
-        border: 1px solid black;
-        border-radius: 1rem;
-        padding: 5rem 8rem 5rem 8rem;
-    }
+        h1 {
+            color: #007BFF;
+        }
 
-    .inactive {
-        color: #555;
-    }
-    .active {
-        color: #00f; /* or any other color you prefer */
-    }
+        button {
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
 
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        input {
+            padding: 10px;
+            margin: 5px;
+            width: 80%;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        li {
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin-top: 10px;
+            padding: 10px;
+        }
     </style>
 </head>
 <body>
+    <h1>Web Bluetooth Demo</h1>
     <label for="languageSelect">Select Language:</label>
     <select id="languageSelect">
         <option value="en-US">English</option>
         <option value="mr-IN">Marathi</option>
     </select>
+    <button id="connectButton">Connect to ESP32</button>
+    <button id="startButton">Start Microphone</button>
+    <button id="closeButton">Close Microphone</button>
+    <input type="text" id="textInput" placeholder="Enter text to send">
 
-    <button id="startButton">Start</button>
-    <button id="closeButton">Close</button>
-    <p id="convert_text" class="inactive">Click 'Start' to begin speech recognition.</p>
+    <ul id="outputList"></ul>
 
     <script>
-        // main.js
-        const startButton = document.getElementById("startButton");
-        const closeButton = document.getElementById("closeButton");
-        const convertText = document.getElementById("convert_text");
-        const languageSelect = document.getElementById("languageSelect");
+        document.addEventListener('DOMContentLoaded', () => {
+            const connectButton = document.getElementById('connectButton');
+            const startButton = document.getElementById('startButton');
+            const closeButton = document.getElementById('closeButton');
+            const textInput = document.getElementById('textInput');
+            const outputList = document.getElementById('outputList');
+            const languageSelect = document.getElementById('languageSelect');
 
-        var speech = false; // Initialize speech recognition as false
-        const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-        recognition.interimResults = true;
+            let bluetoothDevice;
+            let bluetoothServer;
+            let bluetoothCharacteristic;
+            let recognition;
 
-        recognition.addEventListener("result", (e) => {
-            const transcript = Array.from(e.results)
-                .map((result) => result[0])
-                .map((result) => result.transcript);
-            convertText.innerHTML = transcript;
-        });
+            // Load previous conversions from local storage
+            const savedConversions = JSON.parse(localStorage.getItem('conversions')) || [];
 
-        recognition.addEventListener("end", () => {
-            if (speech) {
+            // Display previous conversions
+            savedConversions.forEach(addToList);
+
+            async function connectToDevice() {
+                try {
+                    bluetoothDevice = await navigator.bluetooth.requestDevice({
+                        filters: [{ services: ['0000fff0-0000-1000-8000-00805f9b34fb'] }]
+                    });
+
+                    bluetoothServer = await bluetoothDevice.gatt.connect();
+                    bluetoothCharacteristic = await bluetoothServer.getPrimaryService('0000fff0-0000-1000-8000-00805f9b34fb')
+                        .then(service => service.getCharacteristic('0000fff1-0000-1000-8000-00805f9b34fb'));
+
+                    // Enable the send button after successful connection
+                    sendButton.disabled = false;
+
+                    // Handle notifications (data received from ESP32)
+                    bluetoothCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
+                        const receivedText = new TextDecoder().decode(event.target.value);
+                        const listItemText = 'Received from ESP32: ' + receivedText;
+                        addToList(listItemText);
+
+                        // Save the conversion to local storage
+                        savedConversions.push(listItemText);
+                        localStorage.setItem('conversions', JSON.stringify(savedConversions));
+                    });
+                    await bluetoothCharacteristic.startNotifications();
+                } catch (error) {
+                    console.error('Error connecting to Bluetooth device:', error);
+                }
+            }
+
+            connectButton.addEventListener('click', async () => {
+                await connectToDevice();
+            });
+
+            startButton.addEventListener('click', () => {
+                recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+                recognition.interimResults = true;
+                recognition.lang = languageSelect.value; // Set the recognition language
+
+                recognition.addEventListener('result', (e) => {
+                    const transcript = Array.from(e.results)
+                        .map(result => result[0])
+                        .map(result => result.transcript)
+                        .join('');
+
+                    textInput.value = transcript;
+
+                    // Automatically send the text to the ESP32
+                    sendTextToESP32(transcript);
+                });
+
+                recognition.addEventListener('end', () => {
+                    if (!closeButton.disabled) {
+                        recognition.start();  // Restart the recognition if not closed
+                    }
+                });
+
+                startButton.disabled = true;
+                closeButton.disabled = false;
+
                 recognition.start();
+            });
+
+            closeButton.addEventListener('click', () => {
+                if (recognition) {
+                    recognition.stop();
+                    closeButton.disabled = true;
+                    startButton.disabled = false;
+                }
+            });
+
+            function sendTextToESP32(text) {
+                if (bluetoothCharacteristic && bluetoothServer.connected) {
+                    const encoder = new TextEncoder('utf-8');
+                    bluetoothCharacteristic.writeValue(encoder.encode(text));
+                }
             }
-            convertText.classList.remove("active");
-            convertText.classList.add("inactive");
-        });
 
-        startButton.addEventListener("click", function () {
-            if (!speech) {
-                speech = true;
-                recognition.start();
-                convertText.innerHTML = "Listening...";
-                convertText.classList.remove("inactive");
-                convertText.classList.add("active");
+            function addToList(text) {
+                const listItem = document.createElement('li');
+                listItem.textContent = text;
+                outputList.appendChild(listItem);
             }
         });
-
-        closeButton.addEventListener("click", function () {
-            if (speech) {
-                speech = false;
-                recognition.stop();
-            }
-            convertText.innerHTML = "Click 'Start' to begin speech recognition.";
-            convertText.classList.remove("active");
-            convertText.classList.add("inactive");
-        });
-
-        languageSelect.addEventListener("change", function () {
-            // Set the language based on the selected option
-            recognition.lang = languageSelect.value;
-        });
-
     </script>
 </body>
 </html>
